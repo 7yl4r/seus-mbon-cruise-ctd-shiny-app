@@ -18,6 +18,24 @@ sample_ctd_data <- data.frame(
   oxygen = c(6.5, 6.2, 5.8, 5.5, 5.2)
 )
 
+# Helper function to create CTD profile plots
+create_ctd_plot <- function(data, x_var, y_var, x_label, color, hover_format) {
+  plot_ly(data, 
+          x = as.formula(paste0("~", x_var)), 
+          y = as.formula(paste0("~-", y_var)),
+          type = 'scatter',
+          mode = 'markers+lines',
+          text = ~station_id,
+          hovertemplate = hover_format,
+          customdata = as.formula(paste0("~", y_var)),
+          marker = list(size = 10, color = color)) %>%
+    layout(
+      xaxis = list(title = x_label),
+      yaxis = list(title = "Depth (m)"),
+      margin = list(l = 50, r = 20, t = 40, b = 40)
+    )
+}
+
 # Define UI
 ui <- fluidPage(
   titlePanel("SE-US MBON Cruise CTD Data Explorer"),
@@ -96,65 +114,47 @@ server <- function(input, output, session) {
   
   # Temperature vs Depth plot
   output$temp_plot <- renderPlotly({
-    plot_ly(sample_ctd_data, 
-            x = ~temperature, 
-            y = ~-depth,
-            type = 'scatter',
-            mode = 'markers+lines',
-            text = ~station_id,
-            hovertemplate = paste('<b>%{text}</b><br>',
-                                 'Temperature: %{x:.1f} °C<br>',
-                                 'Depth: %{customdata} m<br>',
-                                 '<extra></extra>'),
-            customdata = ~depth,
-            marker = list(size = 10, color = '#FF6B6B')) %>%
-      layout(
-        xaxis = list(title = "Temperature (°C)"),
-        yaxis = list(title = "Depth (m)"),
-        margin = list(l = 50, r = 20, t = 40, b = 40)
-      )
+    create_ctd_plot(
+      sample_ctd_data,
+      "temperature",
+      "depth",
+      "Temperature (°C)",
+      "#FF6B6B",
+      paste('<b>%{text}</b><br>',
+            'Temperature: %{x:.1f} °C<br>',
+            'Depth: %{customdata} m<br>',
+            '<extra></extra>')
+    )
   })
   
   # Salinity vs Depth plot
   output$salinity_plot <- renderPlotly({
-    plot_ly(sample_ctd_data, 
-            x = ~salinity, 
-            y = ~-depth,
-            type = 'scatter',
-            mode = 'markers+lines',
-            text = ~station_id,
-            hovertemplate = paste('<b>%{text}</b><br>',
-                                 'Salinity: %{x:.1f} PSU<br>',
-                                 'Depth: %{customdata} m<br>',
-                                 '<extra></extra>'),
-            customdata = ~depth,
-            marker = list(size = 10, color = '#4ECDC4')) %>%
-      layout(
-        xaxis = list(title = "Salinity (PSU)"),
-        yaxis = list(title = "Depth (m)"),
-        margin = list(l = 50, r = 20, t = 40, b = 40)
-      )
+    create_ctd_plot(
+      sample_ctd_data,
+      "salinity",
+      "depth",
+      "Salinity (PSU)",
+      "#4ECDC4",
+      paste('<b>%{text}</b><br>',
+            'Salinity: %{x:.1f} PSU<br>',
+            'Depth: %{customdata} m<br>',
+            '<extra></extra>')
+    )
   })
   
   # Oxygen vs Depth plot
   output$oxygen_plot <- renderPlotly({
-    plot_ly(sample_ctd_data, 
-            x = ~oxygen, 
-            y = ~-depth,
-            type = 'scatter',
-            mode = 'markers+lines',
-            text = ~station_id,
-            hovertemplate = paste('<b>%{text}</b><br>',
-                                 'Oxygen: %{x:.1f} mg/L<br>',
-                                 'Depth: %{customdata} m<br>',
-                                 '<extra></extra>'),
-            customdata = ~depth,
-            marker = list(size = 10, color = '#95E1D3')) %>%
-      layout(
-        xaxis = list(title = "Dissolved Oxygen (mg/L)"),
-        yaxis = list(title = "Depth (m)"),
-        margin = list(l = 50, r = 20, t = 40, b = 40)
-      )
+    create_ctd_plot(
+      sample_ctd_data,
+      "oxygen",
+      "depth",
+      "Dissolved Oxygen (mg/L)",
+      "#95E1D3",
+      paste('<b>%{text}</b><br>',
+            'Oxygen: %{x:.1f} mg/L<br>',
+            'Depth: %{customdata} m<br>',
+            '<extra></extra>')
+    )
   })
   
   # Station information display
@@ -166,10 +166,18 @@ server <- function(input, output, session) {
         filter(station_id == selected_station())
       
       if (nrow(station_data) > 0) {
+        # Format longitude with proper hemisphere indicator
+        lon_hemisphere <- if (station_data$longitude < 0) "W" else "E"
+        lon_value <- abs(station_data$longitude)
+        
+        # Format latitude with proper hemisphere indicator
+        lat_hemisphere <- if (station_data$latitude < 0) "S" else "N"
+        lat_value <- abs(station_data$latitude)
+        
         paste0(
           "Station ID: ", station_data$station_id, "\n",
-          "Position: ", station_data$latitude, "°N, ", 
-                       abs(station_data$longitude), "°W\n",
+          "Position: ", lat_value, "°", lat_hemisphere, ", ", 
+                       lon_value, "°", lon_hemisphere, "\n",
           "Depth: ", station_data$depth, " m\n",
           "Temperature: ", station_data$temperature, " °C\n",
           "Salinity: ", station_data$salinity, " PSU\n",
