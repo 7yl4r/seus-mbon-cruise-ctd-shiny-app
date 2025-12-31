@@ -58,7 +58,7 @@ ctd_profile_data <- data.frame(
     # Station ST004 data
     4.0, 6.0, 10.0, 18.0, 27.0, 37.0, 47.0, 57.0, 67.0, 80.0
   ),
-  time = NA,  # Time data not provided in sample
+  time = rep(NA, 50),  # Time data not provided in sample
   station = c(
     rep("WS", 10),
     rep("ST001", 10),
@@ -168,17 +168,19 @@ server <- function(input, output, session) {
     selected_station(click$id)
   })
   
-  # Temperature vs Depth plot
-  output$temp_plot <- renderPlotly({
-    # Filter data for selected station, or show all if none selected
-    plot_data <- if (!is.null(selected_station())) {
+  # Reactive expression to get filtered data for selected station
+  filtered_ctd_data <- reactive({
+    if (!is.null(selected_station())) {
       ctd_profile_data %>% filter(station == selected_station())
     } else {
       ctd_profile_data
     }
-    
+  })
+  
+  # Temperature vs Depth plot
+  output$temp_plot <- renderPlotly({
     create_ctd_plot(
-      plot_data,
+      filtered_ctd_data(),
       "temperature",
       "pressure",
       "Temperature (°C)",
@@ -192,15 +194,8 @@ server <- function(input, output, session) {
   
   # Salinity vs Depth plot
   output$salinity_plot <- renderPlotly({
-    # Filter data for selected station, or show all if none selected
-    plot_data <- if (!is.null(selected_station())) {
-      ctd_profile_data %>% filter(station == selected_station())
-    } else {
-      ctd_profile_data
-    }
-    
     create_ctd_plot(
-      plot_data,
+      filtered_ctd_data(),
       "salinity",
       "pressure",
       "Salinity (PSU)",
@@ -212,15 +207,21 @@ server <- function(input, output, session) {
     )
   })
   
-  # Oxygen vs Depth plot - Note: oxygen data not in CSV, showing message
+  # Oxygen vs Depth plot - Note: oxygen data not in CSV format
   output$oxygen_plot <- renderPlotly({
-    # Create empty plot with message
+    # Create empty plot with context-aware message
+    message_text <- if (!is.null(selected_station())) {
+      paste0("Oxygen data not available for station ", selected_station())
+    } else {
+      "Oxygen data not available in CTD profiles"
+    }
+    
     plot_ly() %>%
       layout(
         xaxis = list(title = "Dissolved Oxygen (mg/L)"),
         yaxis = list(title = "Depth (m)"),
         annotations = list(
-          text = "Oxygen data not available in CTD profiles",
+          text = message_text,
           x = 0.5,
           y = 0.5,
           xref = "paper",
