@@ -113,23 +113,83 @@ if (nrow(station_locations) > 0) {
                 max(station_locations$file_count), "files per station"))
 }
 
-# Helper function to create CTD profile plots for a specific station
-create_ctd_plot <- function(data, x_var, y_var, x_label, color, hover_format) {
-  plot_ly(data, 
-          x = as.formula(paste0("~", x_var)), 
-          y = as.formula(paste0("~-", y_var)),
-          type = 'scatter',
-          mode = 'markers+lines',
-          text = ~station,
-          hovertemplate = hover_format,
-          customdata = as.formula(paste0("~", y_var)),
-          marker = list(size = 8, color = color),
-          line = list(color = color, width = 2)) %>%
+# Helper function to create CTD profile plots with cruise-based coloring
+create_ctd_plot <- function(data, x_var, y_var, x_label) {
+  if (nrow(data) == 0) {
+    # Return empty plot with message
+    return(
+      plot_ly() %>%
+        layout(
+          xaxis = list(title = x_label),
+          yaxis = list(title = "Depth (m)"),
+          annotations = list(
+            text = "No data available",
+            x = 0.5,
+            y = 0.5,
+            xref = "paper",
+            yref = "paper",
+            showarrow = FALSE,
+            font = list(size = 14, color = "#999")
+          ),
+          margin = list(l = 50, r = 20, t = 40, b = 40)
+        )
+    )
+  }
+  
+  # Get unique cruises and assign colors
+  cruises <- unique(data$cruise_id)
+  cruises <- cruises[order(cruises)]
+  
+  # Color palette for cruises (using a colorblind-friendly palette)
+  color_palette <- c(
+    "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd",
+    "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"
+  )
+  
+  # Create plot
+  p <- plot_ly()
+  
+  for (i in seq_along(cruises)) {
+    cruise <- cruises[i]
+    cruise_data <- data %>% filter(cruise_id == cruise)
+    color <- color_palette[(i - 1) %% length(color_palette) + 1]
+    
+    p <- p %>%
+      add_trace(
+        data = cruise_data,
+        x = as.formula(paste0("~", x_var)),
+        y = as.formula(paste0("~-", y_var)),
+        type = 'scatter',
+        mode = 'markers+lines',
+        name = cruise,
+        text = ~cruise_id,
+        hovertemplate = paste(
+          '<b>Cruise: %{text}</b><br>',
+          x_label, ': %{x:.2f}<br>',
+          'Depth: %{customdata:.1f} m<br>',
+          '<extra></extra>'
+        ),
+        customdata = as.formula(paste0("~", y_var)),
+        marker = list(size = 6, color = color),
+        line = list(color = color, width = 1.5)
+      )
+  }
+  
+  p <- p %>%
     layout(
       xaxis = list(title = x_label),
       yaxis = list(title = "Depth (m)"),
-      margin = list(l = 50, r = 20, t = 40, b = 40)
+      margin = list(l = 50, r = 20, t = 40, b = 40),
+      showlegend = TRUE,
+      legend = list(
+        orientation = "v",
+        x = 1.02,
+        y = 1,
+        font = list(size = 10)
+      )
     )
+  
+  return(p)
 }
 
 # Define UI
@@ -251,13 +311,14 @@ server <- function(input, output, session) {
     
     # Clear loading message
     if (nrow(station_data) > 0) {
-      loading_status(paste0("✓ Loaded ", nrow(station_data), " records"))
+      loading_status(paste0("✓ Loaded ", nrow(station_data), " records from ", 
+                           length(unique(station_data$cruise_id)), " cruise(s)"))
     } else {
       loading_status("⚠ No data available for this station")
     }
   })
   
-  # Reactive expression to get filtered data for selected station
+  # Reactive expression to get data for selected station
   filtered_ctd_data <- reactive({
     station_ctd_data()
   })
@@ -268,12 +329,7 @@ server <- function(input, output, session) {
       filtered_ctd_data(),
       "temperature",
       "pressure",
-      "Temperature (°C)",
-      "#FF6B6B",
-      paste('<b>Station: %{text}</b><br>',
-            'Temperature: %{x:.2f} °C<br>',
-            'Depth: %{customdata:.1f} m<br>',
-            '<extra></extra>')
+      "Temperature (°C)"
     )
   })
   
@@ -283,12 +339,7 @@ server <- function(input, output, session) {
       filtered_ctd_data(),
       "salinity",
       "pressure",
-      "Salinity (PSU)",
-      "#4ECDC4",
-      paste('<b>Station: %{text}</b><br>',
-            'Salinity: %{x:.2f} PSU<br>',
-            'Depth: %{customdata:.1f} m<br>',
-            '<extra></extra>')
+      "Salinity (PSU)"
     )
   })
   
