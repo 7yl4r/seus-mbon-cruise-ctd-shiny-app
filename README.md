@@ -43,4 +43,5 @@ The application will open in your default web browser.
 
 ## Data
 
-Currently, the application uses sample CTD data for demonstration purposes. In production, this would be replaced with actual cruise data loaded from external files (e.g., CSV, NetCDF, or database).
+### Setup
+Data from seus-mbon-cruise-ctd-processing/data/02_clean should be copied into data/02_clean.
