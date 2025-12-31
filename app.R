@@ -7,18 +7,42 @@ library(plotly)
 library(dplyr)
 library(readr)
 
-# Load CTD profile data from CSV files
-load_ctd_data <- function() {
-  message("Loading CTD profile data from CSV files...")
+# CTD data directory
+csv_dir <- "data/02_clean"
+
+# Function to get all available CSV files and their station mappings
+get_station_file_mapping <- function() {
+  csv_files <- list.files(csv_dir, pattern = "\\.csv$", full.names = FALSE)
   
-  # Get list of all CSV files in data/02_clean directory
-  csv_dir <- "data/02_clean"
-  csv_files <- list.files(csv_dir, pattern = "\\.csv$", full.names = TRUE)
+  # Extract station name from filename (last part after final underscore, before .csv)
+  station_names <- sub(".*_([^_]+)\\.csv$", "\\1", csv_files)
   
-  message(paste("Found", length(csv_files), "CSV files"))
+  # Create a data frame mapping station names to file paths
+  mapping <- data.frame(
+    station = station_names,
+    filename = csv_files,
+    filepath = file.path(csv_dir, csv_files),
+    stringsAsFactors = FALSE
+  )
   
-  # Read and combine all CSV files
-  ctd_data_list <- lapply(csv_files, function(file) {
+  return(mapping)
+}
+
+# Function to load CTD data for a specific station on-demand
+load_station_ctd_data <- function(station_name, file_mapping) {
+  # Find all files for this station
+  station_files <- file_mapping %>% 
+    filter(station == station_name)
+  
+  if (nrow(station_files) == 0) {
+    warning(paste("No CSV files found for station:", station_name))
+    return(data.frame())
+  }
+  
+  message(paste("Loading", nrow(station_files), "file(s) for station:", station_name))
+  
+  # Read and combine all files for this station
+  ctd_data_list <- lapply(station_files$filepath, function(file) {
     tryCatch({
       # Read CSV file with proper column types
       data <- read_csv(file, 
@@ -51,16 +75,18 @@ load_ctd_data <- function() {
   # Combine all data frames
   if (length(ctd_data_list) > 0) {
     ctd_data <- bind_rows(ctd_data_list)
-    message(paste("Loaded", nrow(ctd_data), "CTD profile records from", length(ctd_data_list), "files"))
+    message(paste("Loaded", nrow(ctd_data), "records for station", station_name))
     return(ctd_data)
   } else {
-    warning("No CTD data could be loaded")
+    warning(paste("No CTD data could be loaded for station:", station_name))
     return(data.frame())
   }
 }
 
-# Load the CTD profile data
-ctd_profile_data <- load_ctd_data()
+# Initialize file mapping (fast operation - just reads filenames)
+station_file_mapping <- get_station_file_mapping()
+message(paste("Found", nrow(station_file_mapping), "CSV files for", 
+              length(unique(station_file_mapping$station)), "unique stations"))
 
 # Load station location metadata from CSV
 load_station_locations <- function() {
@@ -127,6 +153,9 @@ ui <- fluidPage(
     column(width = 6,
            wellPanel(
              h4("CTD Data Visualizations"),
+             div(id = "loading-status", 
+                 style = "color: #0066CC; font-style: italic; min-height: 20px;",
+                 uiOutput("loading_message")),
              tabsetPanel(
                tabPanel("Temperature vs Depth",
                         plotlyOutput("temp_plot", height = "250px")
@@ -153,6 +182,21 @@ server <- function(input, output, session) {
   # Reactive value to store selected station
   selected_station <- reactiveVal(NULL)
   
+  # Reactive value to cache loaded CTD data for selected station
+  station_ctd_data <- reactiveVal(data.frame())
+  
+  # Reactive value for loading status
+  loading_status <- reactiveVal("")
+  
+  # Loading message output
+  output$loading_message <- renderUI({
+    if (loading_status() != "") {
+      HTML(loading_status())
+    } else {
+      HTML("&nbsp;")
+    }
+  })
+  
   # Render the map
   output$map <- renderLeaflet({
     leaflet(station_locations) %>%
@@ -177,19 +221,29 @@ server <- function(input, output, session) {
       )
   })
   
-  # Handle map marker clicks
+  # Handle map marker clicks and load station data
   observeEvent(input$map_marker_click, {
     click <- input$map_marker_click
     selected_station(click$id)
+    
+    # Show loading message
+    loading_status(paste0("Loading data for station ", click$id, "..."))
+    
+    # Load CTD data for the selected station
+    station_data <- load_station_ctd_data(click$id, station_file_mapping)
+    station_ctd_data(station_data)
+    
+    # Clear loading message
+    if (nrow(station_data) > 0) {
+      loading_status(paste0("✓ Loaded ", nrow(station_data), " records"))
+    } else {
+      loading_status("⚠ No data available for this station")
+    }
   })
   
   # Reactive expression to get filtered data for selected station
   filtered_ctd_data <- reactive({
-    if (!is.null(selected_station())) {
-      ctd_profile_data %>% filter(station == selected_station())
-    } else {
-      ctd_profile_data
-    }
+    station_ctd_data()
   })
   
   # Temperature vs Depth plot
@@ -256,8 +310,7 @@ server <- function(input, output, session) {
       station_loc <- station_locations %>% 
         filter(station == selected_station())
       
-      station_profile <- ctd_profile_data %>%
-        filter(station == selected_station())
+      station_profile <- station_ctd_data()
       
       if (nrow(station_loc) > 0 && nrow(station_profile) > 0) {
         # Format longitude with proper hemisphere indicator
@@ -275,7 +328,7 @@ server <- function(input, output, session) {
         
         paste0(
           "Station: ", selected_station(), "\n",
-          "Cruise ID: ", unique(station_profile$cruise_id), "\n",
+          "Cruise ID: ", paste(unique(station_profile$cruise_id), collapse = ", "), "\n",
           "Position: ", lat_value, "°", lat_hemisphere, ", ", 
                        lon_value, "°", lon_hemisphere, "\n\n",
           "Profile Summary:\n",
