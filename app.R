@@ -7,26 +7,7 @@ library(plotly)
 library(dplyr)
 library(readr)
 
-# CTD data directory
-csv_dir <- "data/02_clean"
-
-# Function to get all available CSV files and their station mappings
-get_station_file_mapping <- function() {
-  csv_files <- list.files(csv_dir, pattern = "\\.csv$", full.names = FALSE)
-  
-  # Extract station name from filename (last part after final underscore, before .csv)
-  station_names <- sub(".*_([^_]+)\\.csv$", "\\1", csv_files)
-  
-  # Create a data frame mapping station names to file paths
-  mapping <- data.frame(
-    station = station_names,
-    filename = csv_files,
-    filepath = file.path(csv_dir, csv_files),
-    stringsAsFactors = FALSE
-  )
-  
-  return(mapping)
-}
+source("R/get_station_file_mapping.R")
 
 # Function to load CTD data for a specific station on-demand
 load_station_ctd_data <- function(station_name, file_mapping) {
@@ -117,6 +98,21 @@ load_station_locations <- function() {
 # Station location metadata (for the map)
 station_locations <- load_station_locations()
 
+# Add file counts to station locations for sizing markers
+if (nrow(station_locations) > 0) {
+  file_counts <- station_file_mapping %>%
+    group_by(station) %>%
+    summarise(file_count = n(), .groups = 'drop')
+  
+  station_locations <- station_locations %>%
+    left_join(file_counts, by = "station") %>%
+    mutate(file_count = ifelse(is.na(file_count), 0, file_count))
+  
+  message(paste("Added file counts to station locations. Range:", 
+                min(station_locations$file_count), "-", 
+                max(station_locations$file_count), "files per station"))
+}
+
 # Helper function to create CTD profile plots for a specific station
 create_ctd_plot <- function(data, x_var, y_var, x_label, color, hover_format) {
   plot_ly(data, 
@@ -199,25 +195,45 @@ server <- function(input, output, session) {
   
   # Render the map
   output$map <- renderLeaflet({
-    leaflet(station_locations) %>%
+    # Calculate radius based on file count (scale between 4 and 16)
+    # Using log scale for better visual distribution
+    if ("file_count" %in% names(station_locations) && nrow(station_locations) > 0) {
+      min_files <- min(station_locations$file_count[station_locations$file_count > 0], na.rm = TRUE)
+      max_files <- max(station_locations$file_count, na.rm = TRUE)
+      
+      # Create a scaled radius column
+      station_data <- station_locations %>%
+        mutate(
+          marker_radius = ifelse(file_count > 0,
+                                4 + 12 * (log(file_count + 1) - log(min_files + 1)) / 
+                                    (log(max_files + 1) - log(min_files + 1)),
+                                4)
+        )
+    } else {
+      station_data <- station_locations %>%
+        mutate(marker_radius = 8)
+    }
+    
+    leaflet(station_data) %>%
       addTiles() %>%
       addCircleMarkers(
         lng = ~longitude,
         lat = ~latitude,
-        radius = 8,
+        radius = ~marker_radius,
         color = "#0066CC",
         fillColor = "#0066CC",
         fillOpacity = 0.7,
         popup = ~paste0("<b>Station: ", station, "</b><br>",
                        "Lat: ", latitude, "<br>",
-                       "Lon: ", longitude),
+                       "Lon: ", longitude, "<br>",
+                       "Files: ", file_count),
         layerId = ~station
       ) %>%
       fitBounds(
-        lng1 = min(station_locations$longitude) - 0.5,
-        lat1 = min(station_locations$latitude) - 0.5,
-        lng2 = max(station_locations$longitude) + 0.5,
-        lat2 = max(station_locations$latitude) + 0.5
+        lng1 = min(station_data$longitude) - 0.5,
+        lat1 = min(station_data$latitude) - 0.5,
+        lng2 = max(station_data$longitude) + 0.5,
+        lat2 = max(station_data$latitude) + 0.5
       )
   })
   
