@@ -198,9 +198,15 @@ ui <- fluidPage(
   titlePanel(
     div(style = "display: flex; justify-content: space-between; align-items: center;",
         div("SE-US MBON Cruise CTD Data Explorer"),
-        actionLink("info_link", "More Information", 
-                   icon = icon("info-circle"),
-                   style = "font-size: 16px; margin-right: 10px;")
+        div(
+          tags$a(href = "https://github.com/7yl4r/seus-mbon-cruise-ctd-shiny-app",
+                 target = "_blank",
+                 icon("github"), " Source Code on GitHub",
+                 style = "font-size: 16px; margin-right: 15px; text-decoration: none;"),
+          actionLink("info_link", "More Information", 
+                     icon = icon("info-circle"),
+                     style = "font-size: 16px; margin-right: 10px;")
+        )
     )
   ),
   
