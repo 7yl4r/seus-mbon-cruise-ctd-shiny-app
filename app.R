@@ -6,6 +6,7 @@ library(leaflet)
 library(plotly)
 library(dplyr)
 library(readr)
+library(markdown)
 
 source("R/get_station_file_mapping.R")
 
@@ -194,7 +195,14 @@ create_ctd_plot <- function(data, x_var, y_var, x_label) {
 
 # Define UI
 ui <- fluidPage(
-  titlePanel("SE-US MBON Cruise CTD Data Explorer"),
+  titlePanel(
+    div(style = "display: flex; justify-content: space-between; align-items: center;",
+        div("SE-US MBON Cruise CTD Data Explorer"),
+        actionLink("info_link", "More Information", 
+                   icon = icon("info-circle"),
+                   style = "font-size: 16px; margin-right: 10px;")
+    )
+  ),
   
   fluidRow(
     # Left column: Interactive Map
@@ -234,6 +242,17 @@ ui <- fluidPage(
 
 # Define server logic
 server <- function(input, output, session) {
+  
+  # Show information modal when More Information link is clicked
+  observeEvent(input$info_link, {
+    showModal(modalDialog(
+      title = "About This Application",
+      HTML(markdownToHTML(text = readLines("about.md"), fragment.only = TRUE)),
+      easyClose = TRUE,
+      size = "l",
+      footer = modalButton("Close")
+    ))
+  })
   
   # Reactive value to store selected station
   selected_station <- reactiveVal(NULL)
