@@ -20,6 +20,7 @@ Data                        | Description                                     | 
 --------------------------- | ----------------------------------------------- | -------------------------
 Data Information Repository | (FRESCA Researchers Only) Overview of Data      | https://github.com/Ecosystem-Assessment-Lab
 CTD Data                    | CTD data `.csv` files.                          | https://usf.box.com/s/dvoi1ve0jn3apbdlad114uhn0pvmjool  
+HYCOM Satellite Altimetry   | Altimetry data derived from satellite data.     | https://usf.app.box.com/s/j54a7z0rekvc8jvvfilt5u7ce1a5o5u4/folder/331007433166
 
 
 ---
